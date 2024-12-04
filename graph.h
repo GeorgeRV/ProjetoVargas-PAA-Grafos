@@ -2,6 +2,7 @@
 #define A2_GRAPH_H
 
 #include <iostream>
+#include <vector>
 #include "heap.h"
 #include "edge.h"
 
@@ -10,6 +11,11 @@ typedef int vertex;
 
 using namespace std;
 
+struct region {
+    int id;
+    vertex v;
+    int size;
+};
 
 class GraphCity {
 public:
@@ -17,15 +23,22 @@ public:
     ~GraphCity();
     void addEdge(vertex v1, vertex v2,  int cost, int distance);
     void removeEdge(vertex v1, vertex v2);
+    int numVertices();
     void print(vertex v0, int regionSize);
+    void addRegion(int id, vertex start, int size);
+    region getRegion(int index);
     bool isSubGraph(GraphCity & h);
     void cptDijkstra(vertex v0, vertex regionStart,int regionSize, vertex * parent, int * distance, bool useCost);
     vertex findBestStation(vertex v0, int regionSize);
+    void initialize(vertex * parent, bool * inTree, int * vertexCost) const;
+    void mstPrim(vertex * parent);
+    GraphCity createSubGraph(vector<vertex> stations, vertex ** parents);
+    void defineSubwayLine();
 
 private:
     int m_numVertices;
     int m_numEdges;
-    vertex m_startVertex;
+    vector<region> m_regions;  //(start, size)
     EdgeNode** m_edges;
 };
 
@@ -81,11 +94,15 @@ void GraphCity::removeEdge(vertex v1, vertex v2) {
     }
 }
 
+int GraphCity::numVertices(){
+    return m_numVertices;
+}
+
 void GraphCity::print(vertex v0 = 0, int regionSize = -1) {
     if (regionSize == -1) {
         regionSize = m_numVertices;
     }
-    for (vertex i = v0; i < regionSize; ++i) {
+    for (vertex i = v0; i < v0 + regionSize; ++i) {
         EdgeNode* edge = m_edges[i];
         while (edge) {
             printf("(%d,%d) ", i, edge->otherVertex());
@@ -93,6 +110,22 @@ void GraphCity::print(vertex v0 = 0, int regionSize = -1) {
         }
         printf("\n");
     }
+}
+
+void GraphCity::addRegion(int id, vertex start, int size) {
+    region r;
+    r.id = id;
+    r.v = start;
+    r.size = size;
+
+    m_regions.push_back(r);
+}
+
+region GraphCity::getRegion(int index) {
+    if (index >= 0 && index < m_regions.size()) {
+        return m_regions[index];
+    }
+    return {-1, -1}; // Região inválida
 }
 
 bool GraphCity::isSubGraph(GraphCity & h) {
@@ -115,7 +148,6 @@ bool GraphCity::isSubGraph(GraphCity & h) {
     }
     return true;
 }
-
 
 void GraphCity::cptDijkstra(vertex v0, vertex regionStart,int regionSize, vertex * parent, int * distance, bool useCost) {
     bool checked[regionSize];
@@ -182,7 +214,6 @@ vertex GraphCity::findBestStation(vertex v0, int regionSize) {
         for (int u = 0; u < regionSize; ++u) {
             if(distance[v][u] > distFurthestVertex) distFurthestVertex = distance[v][u];
         }
-        cout << v << ": " << distFurthestVertex << endl;
         if (distFurthestVertex < minCost) {
             minCost = distFurthestVertex;
             bestStation = v + v0;
@@ -191,6 +222,114 @@ vertex GraphCity::findBestStation(vertex v0, int regionSize) {
 
     return bestStation;
 }
+
+void GraphCity::initialize(vertex * parent, bool * inTree, int * vertexCost) const {
+    for (vertex v=0; v < m_numVertices; v++) {
+        parent[v] = -1;
+        inTree[v] = false;
+        vertexCost[v] = INT_MAX;
+    }
+    parent[0] = 0;
+    inTree[0] = true;
+    EdgeNode * edge = m_edges[0];
+    while(edge) {
+        vertex v2 = edge->otherVertex();
+        parent[v2] = 0;
+        vertexCost[v2] = edge->cost();
+        edge = edge->next();
+    }
+}
+
+void GraphCity::mstPrim(vertex * parent) {
+    bool inTree[m_numVertices];
+    int vertexCost[m_numVertices];
+    initialize(parent, inTree, vertexCost);
+    Heap heap; // Create the heap
+    for (vertex v = 1; v < m_numVertices; v++) { heap.insert_or_update(vertexCost[v], v); }
+    while (!heap.empty()) {
+        vertex v1 = heap.top().second; // Min vertex
+        heap.pop(); // Remove from heap
+        if (vertexCost[v1] == INT_MAX) { break; }
+        inTree[v1] = true;
+        EdgeNode * edge = m_edges[v1];
+        while(edge) {
+            vertex v2 = edge->otherVertex();
+            int cost = edge->cost();
+            if (!inTree[v2] && cost < vertexCost[v2]) {
+                vertexCost[v2] = cost;
+                parent[v2] = v1;
+                heap.insert_or_update(vertexCost[v2], v2);
+            }
+            edge = edge->next();
+        }
+    }
+}
+
+GraphCity GraphCity::createSubGraph(vector<vertex> stations, vertex ** parents = nullptr) {
+    int n = stations.size();
+
+    GraphCity SubwayGraph(n);
+
+    for (int i = 0; i < n; ++i) {
+
+        parents[i] = new vertex[m_numVertices];
+        int distance[m_numVertices];
+
+        int id1 = getRegion(i).id;
+        vertex v1 = stations[i];
+
+        cptDijkstra(v1, 0, m_numVertices, parents[i], distance, true);
+
+        for(int j = 0; j < n; j++){
+            if (i == j) continue;
+
+            int id2 = getRegion(j).id;
+            vertex v2 = stations[j];
+
+            SubwayGraph.addEdge(id1, id2, distance[v2]);
+        }
+    }
+
+    return SubwayGraph;
+}
+
+
+void GraphCity::defineSubwayLine() {
+    vector<vertex> stations;
+    for (const auto& region : m_regions) {
+        vertex start = region.v;
+        int size = region.size;
+        stations.push_back(findBestStation(start, size));
+    }
+
+    int numStations = stations.size();
+
+    vertex ** parentCity;
+    parentCity = new vertex*[numStations];
+
+    GraphCity subGraph = createSubGraph(stations, parentCity);
+
+    vertex parentSubway[numStations];
+    subGraph.mstPrim(parentSubway);
+
+    for(int i = 0; i < numStations; i++)
+    {
+        if(i != parentSubway[i])
+        {
+            vertex start = stations[i];
+            vertex end = stations[parentSubway[i]];
+
+            while (start != end)
+            {
+                cout << end << " " << parentCity[i][end] << "\n";
+                end = parentCity[i][end];
+            }
+            cout << "--\n";
+        }
+    }
+
+}
+
 
 
 
