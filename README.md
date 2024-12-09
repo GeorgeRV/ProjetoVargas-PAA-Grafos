@@ -77,7 +77,3 @@ Tempo de execucao: 0.004567 segundos
 ## Conclusão
 
 Este projeto demonstra o uso de grafos e algoritmos clássicos para resolver problemas urbanos, como planejamento de transporte e otimização de rotas. A modelagem e implementação no C++ permite um desempenho eficiente para manipulação de dados grandes e complexos.
-
----
-
-Esse formato ajuda a explicar como compilar e executar o código do projeto, além de fornecer uma breve descrição do funcionamento do programa.
