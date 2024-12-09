@@ -12,7 +12,7 @@ typedef int vertex;
 using namespace std;
 
 struct region {
-    int id;
+    string id;
     vertex v;
     int size;
 };
@@ -21,25 +21,27 @@ class GraphCity {
 public:
     GraphCity(int numVertices);
     ~GraphCity();
-    void addEdge(vertex v1, vertex v2,  int cost, int distance);
+    void addEdge(vertex v1, vertex v2,  int cost, int length, int speedLimit);
     void removeEdge(vertex v1, vertex v2);
     int numVertices();
     void print(vertex v0, int regionSize);
-    void addRegion(int id, vertex start, int size);
+    void addRegion(string id, vertex start, int size);
     region getRegion(int index);
     bool isSubGraph(GraphCity & h);
-    void cptDijkstra(vertex v0, vertex regionStart,int regionSize, vertex * parent, int * distance, bool useCost);
+    void cptDijkstra(vertex v0, vertex regionStart,int regionSize, vertex * parent, int * length, bool useCost);
     vertex findBestStation(vertex v0, int regionSize);
     void initialize(vertex * parent, bool * inTree, int * vertexCost) const;
     void mstPrim(vertex * parent);
     GraphCity createSubGraph(vector<vertex> stations, vertex ** parents);
     void defineSubwayLine();
+    void printSubwayLine();
 
 private:
     int m_numVertices;
     int m_numEdges;
     vector<region> m_regions;  //(start, size)
     EdgeNode** m_edges;
+    vector<pair<vertex, vertex>> m_edgesList;  // Vetor para armazenar as arestas da linha de metro
 };
 
 GraphCity::GraphCity(int numVertices)
@@ -62,7 +64,7 @@ GraphCity::~GraphCity() {
     delete[] m_edges;
 }
 
-void GraphCity::addEdge(vertex v1, vertex v2, int cost = 0, int distance = 0) {
+void GraphCity::addEdge(vertex v1, vertex v2, int cost = 0, int length = 0, int speedLimit = 0) {
 
     EdgeNode* edge = m_edges[v1];
     while (edge) {
@@ -71,7 +73,7 @@ void GraphCity::addEdge(vertex v1, vertex v2, int cost = 0, int distance = 0) {
         }
         edge = edge->next();
     }
-    m_edges[v1] = new EdgeNode(v2, m_edges[v1], cost, distance); // Create the new edge
+    m_edges[v1] = new EdgeNode(v2, m_edges[v1], cost, length, speedLimit); // Create the new edge
     m_numEdges++;
 }
 
@@ -105,6 +107,11 @@ void GraphCity::print(vertex v0 = 0, int regionSize = -1) {
     for (vertex i = v0; i < v0 + regionSize; ++i) {
         EdgeNode* edge = m_edges[i];
         while (edge) {
+            if (edge->otherVertex() < v0 || edge->otherVertex() >= v0 + regionSize) // Considerar apenas dentro da região
+            {
+                edge = edge->next();
+                continue;
+            }
             printf("(%d,%d) ", i, edge->otherVertex());
             edge = edge->next();
         }
@@ -112,7 +119,7 @@ void GraphCity::print(vertex v0 = 0, int regionSize = -1) {
     }
 }
 
-void GraphCity::addRegion(int id, vertex start, int size) {
+void GraphCity::addRegion(string id, vertex start, int size) {
     region r;
     r.id = id;
     r.v = start;
@@ -125,7 +132,7 @@ region GraphCity::getRegion(int index) {
     if (index >= 0 && index < m_regions.size()) {
         return m_regions[index];
     }
-    return {-1, -1}; // Região inválida
+    return {"", -1}; // Região inválida
 }
 
 bool GraphCity::isSubGraph(GraphCity & h) {
@@ -149,22 +156,22 @@ bool GraphCity::isSubGraph(GraphCity & h) {
     return true;
 }
 
-void GraphCity::cptDijkstra(vertex v0, vertex regionStart,int regionSize, vertex * parent, int * distance, bool useCost) {
+void GraphCity::cptDijkstra(vertex v0, vertex regionStart,int regionSize, vertex * parent, int * length, bool useCost) {
     bool checked[regionSize];
     Heap heap; // Create the heap
     for (vertex v=0; v < regionSize; v++) {
         parent[v] = -1;
-        distance[v] = INT_MAX;
+        length[v] = INT_MAX;
         checked[v] = false;
     }
     parent[v0 - regionStart] = v0;
-    distance[v0 - regionStart] = 0;
-    heap.insert_or_update(distance[v0], v0);
+    length[v0 - regionStart] = 0;
+    heap.insert_or_update(length[v0], v0);
     while (!heap.empty()) {
         vertex v1 = heap.top().second; // Min vertex
         vertex indexV1 = v1 - regionStart;
         heap.pop(); // Remove from heap
-        if (distance[indexV1] == INT_MAX) { break; }
+        if (length[indexV1] == INT_MAX) { break; }
         EdgeNode * edge = m_edges[v1];
         while(edge) {
             vertex v2 = edge->otherVertex();
@@ -175,11 +182,11 @@ void GraphCity::cptDijkstra(vertex v0, vertex regionStart,int regionSize, vertex
             }
             vertex indexV2 = v2 - regionStart;
             if (!checked[indexV2]) {
-                int weight = useCost ? edge->cost() : edge->distance(); // Escolhe o peso com base no parâmetro
-                if (distance[indexV1] + weight < distance[indexV2]) {
+                int weight = useCost ? edge->cost() : edge->length(); // Escolhe o peso com base no parâmetro
+                if (length[indexV1] + weight < length[indexV2]) {
                     parent[indexV2] = v1;
-                    distance[indexV2] = distance[indexV1] + weight;
-                    heap.insert_or_update(distance[indexV2], v2);
+                    length[indexV2] = length[indexV1] + weight;
+                    heap.insert_or_update(length[indexV2], v2);
                 }
             }
             edge = edge->next();
@@ -189,19 +196,19 @@ void GraphCity::cptDijkstra(vertex v0, vertex regionStart,int regionSize, vertex
 }
 
 vertex GraphCity::findBestStation(vertex v0, int regionSize) {
-    vertex parent[m_numVertices];
-    int ** distance;
-    distance = new int*[m_numVertices];
+    vertex* parent = new vertex[regionSize];
+    int ** length;
+    length = new int*[regionSize];
 
     for (vertex v=0; v < regionSize; v++) {
-        distance[v] = new int[regionSize];
+        length[v] = new int[regionSize];
         for (vertex u=0; u < regionSize; u++) {
-            distance[v][u] = -1;
+            length[v][u] = -1;
         }
     }
 
     for (vertex v=0; v < regionSize; v++) {
-        cptDijkstra(v + v0, v0, regionSize, parent, distance[v], false);
+        cptDijkstra(v + v0, v0, regionSize, parent, length[v], false);
     }
 
     // Para cada vértice encontra a maior distância entre ele e os outros vértices
@@ -212,13 +219,20 @@ vertex GraphCity::findBestStation(vertex v0, int regionSize) {
     for (int v = 0; v < regionSize; ++v) {
         int distFurthestVertex = INT_MIN;
         for (int u = 0; u < regionSize; ++u) {
-            if(distance[v][u] > distFurthestVertex) distFurthestVertex = distance[v][u];
+            if(length[v][u] > distFurthestVertex) distFurthestVertex = length[v][u];
         }
         if (distFurthestVertex < minCost) {
             minCost = distFurthestVertex;
             bestStation = v + v0;
         }
     }
+
+    for (vertex v = 0; v < regionSize; v++) {
+        delete[] length[v]; // Libera a memória de cada array interno
+    }
+    delete[] length; // Libera o array principal
+    delete[] parent;
+
 
     return bestStation;
 }
@@ -265,6 +279,10 @@ void GraphCity::mstPrim(vertex * parent) {
     }
 }
 
+int intID(string ID){
+    return std::stoi((ID.substr(4))) - 10000;
+}
+
 GraphCity GraphCity::createSubGraph(vector<vertex> stations, vertex ** parents = nullptr) {
     int n = stations.size();
 
@@ -273,20 +291,20 @@ GraphCity GraphCity::createSubGraph(vector<vertex> stations, vertex ** parents =
     for (int i = 0; i < n; ++i) {
 
         parents[i] = new vertex[m_numVertices];
-        int distance[m_numVertices];
+        int length[m_numVertices];
 
-        int id1 = getRegion(i).id;
+        int id1 = intID(getRegion(i).id);
         vertex v1 = stations[i];
 
-        cptDijkstra(v1, 0, m_numVertices, parents[i], distance, true);
+        cptDijkstra(v1, 0, m_numVertices, parents[i], length, true);
 
         for(int j = 0; j < n; j++){
             if (i == j) continue;
 
-            int id2 = getRegion(j).id;
+            int id2 = intID(getRegion(j).id);
             vertex v2 = stations[j];
 
-            SubwayGraph.addEdge(id1, id2, distance[v2]);
+            SubwayGraph.addEdge(id1, id2, length[v2]);
         }
     }
 
@@ -314,23 +332,29 @@ void GraphCity::defineSubwayLine() {
 
     for(int i = 0; i < numStations; i++)
     {
-        if(i != parentSubway[i])
+        if (i != parentSubway[i])
         {
             vertex start = stations[i];
             vertex end = stations[parentSubway[i]];
 
-            while (start != end)
-            {
-                cout << end << " " << parentCity[i][end] << "\n";
+            while (start != end) {
+                m_edgesList.push_back({end, parentCity[i][end]});
                 end = parentCity[i][end];
             }
-            cout << "--\n";
         }
     }
 
+    for (int i = 0; i < numStations; i++) {
+        delete[] parentCity[i];
+    }
+    delete[] parentCity;
 }
 
-
+void GraphCity::printSubwayLine() {
+    for (const auto& edge : m_edgesList) {
+        cout << edge.first << " " << edge.second << "\n";
+    }
+}
 
 
 #endif //A2_GRAPH_H

@@ -1,5 +1,8 @@
 #include <iostream>
+#include <chrono>
 #include "graph.h"
+#include "data.h"
+
 
 using namespace std;
 
@@ -48,13 +51,25 @@ int main() {
     g2.addEdge(2, 9, 1, 1);
 
 
-    g2.addRegion(0, 0,6);
-    g2.addRegion(1, 6,3);
-    g2.addRegion(2, 9,3);
+    g2.addRegion("CEP-10000", 0,6);
+    g2.addRegion("CEP-10001", 6,3);
+    g2.addRegion("CEP-10002", 9,3);
 
-    g2.print();
+    //g2.print();
 
+    auto start = std::chrono::high_resolution_clock::now();
     g2.defineSubwayLine();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    g2.printSubwayLine();
+
+    std::chrono::duration<double> duration = end - start;
+
+    // Exibindo o tempo em segundos
+    std::cout << "Tempo de execucao: " << duration.count() << " segundos" << std::endl;
+
+
+    //readData();
 
     return 0;
 }

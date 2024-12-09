@@ -9,8 +9,8 @@ using namespace std;
 
 class EdgeNode {
 public:
-    EdgeNode(vertex otherVertex, EdgeNode* next, int cost, int distance)
-            : m_otherVertex(otherVertex), m_next(next), m_cost(cost), m_distance(distance) {}
+    EdgeNode(vertex otherVertex, EdgeNode* next, int cost, int length, int speedLimit = 0)
+            : m_otherVertex(otherVertex), m_next(next), m_cost(cost), m_length(length), m_speedLimit(speedLimit) {}
 
     vertex otherVertex() {
         return m_otherVertex;
@@ -24,8 +24,12 @@ public:
         return m_cost;
     }
 
-    int distance() {
-        return m_distance;
+    int length() {
+        return m_length;
+    }
+
+    int speedLimit() {
+        return m_speedLimit;
     }
 
     void setNext(EdgeNode* next) {
@@ -35,7 +39,8 @@ public:
 private:
     int m_otherVertex;
     int m_cost;
-    int m_distance;
+    int m_length;
+    int m_speedLimit;
     EdgeNode* m_next;
 };
 
